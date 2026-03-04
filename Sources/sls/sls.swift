@@ -13,7 +13,6 @@ struct sls: ParsableCommand {
     var name: Int?
     @Argument(help: "パスを入力")
     var path: String
-        
     mutating func run() throws {
         print("Hello \(path)")
         var fileGeter = FileGeter()
@@ -22,12 +21,13 @@ struct sls: ParsableCommand {
             print(file, terminator: " ")
         }
         print()
-        sleep(5)
         var setEmpty = SetEmpty()
-        let emptyFullScreens = setEmpty.makeEmptyString()
-        for emptyFullScreen in emptyFullScreens {
-            print(emptyFullScreen)
-        }
-        sleep(10)
+//        let emptyFullScreens = setEmpty.makeEmptyString()
+//        for emptyFullScreen in emptyFullScreens {
+//            print(emptyFullScreen)
+//        }
+        var SL = SL()
+        let windowSize = setEmpty.getWindowSize()
+        SL.run(row: windowSize.row, col: windowSize.col)
     }
 }

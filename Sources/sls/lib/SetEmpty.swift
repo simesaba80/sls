@@ -5,12 +5,13 @@
 //  Created by simesaba on 2026/03/04.
 //
 import Darwin
+import TermKit
 
 struct SetEmpty{
     var emptyFullScreen: [String] = []
     
     
-    private func getWindowSize() -> (row: Int, col: Int) {
+    func getWindowSize() -> (row: Int, col: Int) {
         var w = winsize()
         guard ioctl(STDOUT_FILENO, TIOCGWINSZ, &w) == 0 else {
             // デフォルト値を返す（ioctlが失敗した場合）
