@@ -22,5 +22,12 @@ struct sls: ParsableCommand {
             print(file, terminator: " ")
         }
         print()
+        sleep(5)
+        var setEmpty = SetEmpty()
+        let emptyFullScreens = setEmpty.makeEmptyString()
+        for emptyFullScreen in emptyFullScreens {
+            print(emptyFullScreen)
+        }
+        sleep(10)
     }
 }
