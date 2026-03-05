@@ -204,8 +204,9 @@ struct SL {
         let wheelHeight = SL.wheel[0].count
         let coalHeight = SL.coalWagon.count
         
-        // 列車全体の高さ
-        let totalHeight = smokeHeight + slTopHeight + wheelHeight + coalHeight
+        // 列車全体の高さ（coalWagonはSL車体と同じ行に並ぶため、高さはsmokeHeight + 車体高さ）
+        let slBodyHeight = slTopHeight + wheelHeight
+        let totalHeight = smokeHeight + max(slBodyHeight, coalHeight)
         
         // 列車全体の幅（各パーツの最大幅）
         let slWidth = SL.slTop.map { $0.count }.max() ?? 0
@@ -273,14 +274,13 @@ struct SL {
                 currentRow += 1
             }
             
-            // 4. 石炭車両を描画
-            for line in SL.coalWagon {
-                let row0 = baseRow0 + currentRow
+            // 4. 石炭車両を描画（SL車体と同じ行から開始）
+            for (i, line) in SL.coalWagon.enumerated() {
+                let row0 = baseRow0 + smokeHeight + i
                 if row0 >= 0 && row0 < rows {
                     // 石炭車両はSLの右側に配置
                     drawLine(line: line, at: x + slWidth, row: row0, cols: cols)
                 }
-                currentRow += 1
             }
 
             // 少し待ってから次のフレームへ
