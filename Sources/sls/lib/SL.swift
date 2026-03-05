@@ -208,10 +208,14 @@ struct SL {
         let slBodyHeight = slTopHeight + wheelHeight
         let totalHeight = smokeHeight + max(slBodyHeight, coalHeight)
         
+        // ファイルwagonを生成（アニメーション前に1回だけ計算）
+        let cargoLines = buildCargoWagon(files: normalizedFiles)
+
         // 列車全体の幅（各パーツの最大幅）
         let slWidth = SL.slTop.map { $0.count }.max() ?? 0
         let coalWidth = SL.coalWagon.map { $0.count }.max() ?? 0
-        let totalWidth = slWidth + coalWidth
+        let cargoWidth = cargoLines.map { $0.count }.max() ?? 0
+        let totalWidth = slWidth + coalWidth + cargoWidth
 
         // 縦方向のセンタリング（0-origin で考える）
         let baseRow0 = max(0, (rows - totalHeight) / 2)
@@ -278,8 +282,15 @@ struct SL {
             for (i, line) in SL.coalWagon.enumerated() {
                 let row0 = baseRow0 + smokeHeight + i
                 if row0 >= 0 && row0 < rows {
-                    // 石炭車両はSLの右側に配置
                     drawLine(line: line, at: x + slWidth, row: row0, cols: cols)
+                }
+            }
+
+            // 5. ファイルwagonを描画（石炭車両の右側）
+            for (i, line) in cargoLines.enumerated() {
+                let row0 = baseRow0 + smokeHeight + i
+                if row0 >= 0 && row0 < rows {
+                    drawLine(line: line, at: x + slWidth + coalWidth, row: row0, cols: cols)
                 }
             }
 
@@ -299,6 +310,52 @@ struct SL {
         }
     }
     
+    /// normalizedFiles（全て同一幅）からファイルwagon行を生成する
+    /// wagon構造（10行）: 空行 / 上枠 / ファイル5行 / 下枠 / 車輪2行
+    private func buildCargoWagon(files: [String]) -> [String] {
+        let maxRows = SL.Cargo.default.maxContentHeight  // 5
+        let minInnerWidth = SL.Cargo.default.minContentWidth  // 26
+        let fileWidth = files.first?.count ?? 0
+
+        // ファイルを5行ずつの列に分割
+        var columns: [[String]] = stride(from: 0, to: max(files.count, 1), by: maxRows).map { start in
+            var col = Array(files[start..<min(start + maxRows, files.count)])
+            while col.count < maxRows { col.append(String(repeating: " ", count: fileWidth)) }
+            return col
+        }
+        if columns.isEmpty {
+            columns = [Array(repeating: String(repeating: " ", count: 1), count: maxRows)]
+        }
+
+        // 各行を横に連結（列間にスペース1つ）
+        let contentRows = (0..<maxRows).map { rowIdx in
+            columns.map { $0[rowIdx] }.joined(separator: " ")
+        }
+
+        // 内部幅を確定（最低でもminInnerWidth）
+        let contentWidth = contentRows.map { $0.count }.max() ?? 0
+        let innerWidth = max(contentWidth, minInnerWidth)
+
+        // コンテンツ行を innerWidth に揃えてから壁を付ける
+        let contentLines = contentRows.map { row -> String in
+            let padded = row + String(repeating: " ", count: max(0, innerWidth - row.count))
+            return "|\(padded)|"
+        }
+
+        let topWidth = innerWidth + 2
+        let emptyLine = String(repeating: " ", count: topWidth)
+        let topBorder = String(repeating: "_", count: topWidth)
+        let botBorder = "|" + String(repeating: "_", count: innerWidth) + "|"
+
+        // 車輪パターン（幅に合わせて調整）
+        // 車輪2つの固定部分: "  |_D__D__D_|" (13) + pad + "|_D__D__D_|  " (13) = 26 + pad = topWidth
+        let wheelPad = max(2, innerWidth - 24)
+        let wheelTop = "  |_D__D__D_|" + String(repeating: " ", count: wheelPad) + "|_D__D__D_|  "
+        let wheelBot = "   \\_/   \\_/" + String(repeating: " ", count: wheelPad + 2) + "\\_/   \\_/   "
+
+        return [emptyLine, topBorder] + contentLines + [botBorder, wheelTop, wheelBot]
+    }
+
     /// 指定位置に1行分の文字列を描画
     private func drawLine(line: String, at x: Int, row: Int, cols: Int) {
         let lineLen = line.count

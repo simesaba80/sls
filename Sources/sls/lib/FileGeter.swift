@@ -12,7 +12,7 @@ struct FileGeter {
         do {
             let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         //    let currentDirectory = FileManager.default.currentDirectoryPath
-            let targetDirectory: URL = URL(fileURLWithPath: path, relativeTo: currentDirectory).standardized
+            let targetDirectory: URL = URL(fileURLWithPath: path, relativeTo: currentDirectory)
             let contents = try FileManager.default.contentsOfDirectory(at: targetDirectory, includingPropertiesForKeys: nil)
             for url in contents {
                 let fileName = url.lastPathComponent
