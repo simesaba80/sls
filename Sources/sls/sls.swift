@@ -30,6 +30,6 @@ struct sls: ParsableCommand {
 //        }
         var sl = SL()
         let windowSize = setEmpty.getWindowSize()
-        sl.run(row: windowSize.row, col: windowSize.col)
+        sl.run(row: windowSize.row, col: windowSize.col, normalizedFiles: normalizedFiles)
     }
 }

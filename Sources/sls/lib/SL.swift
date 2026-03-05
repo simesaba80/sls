@@ -187,7 +187,7 @@ struct SL {
     }
 
     /// row: 行数, col: 列数
-    func run(row rows: Int, col cols: Int) {
+    func run(row rows: Int, col cols: Int, normalizedFiles: [String]) {
         // 0 行/0 列など異常値なら何もしない
         guard rows > 0, cols > 0 else { return }
 
