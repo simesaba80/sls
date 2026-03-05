@@ -5,6 +5,11 @@
 //  Created by simesaba on 2026/03/04.
 //
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 struct FileGeter {
     var files: [String] = []

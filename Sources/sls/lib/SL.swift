@@ -6,8 +6,11 @@
 //
 
 import Foundation
-import TermKit
-
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 /// SLのアスキーアート データ構造
 /// AA copy from https://github.com/mtoyoda/sl/blob/master/sl.h
