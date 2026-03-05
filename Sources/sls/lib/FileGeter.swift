@@ -9,23 +9,31 @@ import Foundation
 struct FileGeter {
     var files: [String] = []
     mutating func getFile(path: String, all: Bool = false) -> [String] {
-        do {
-            let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        //    let currentDirectory = FileManager.default.currentDirectoryPath
-            let targetDirectory: URL = URL(fileURLWithPath: path, relativeTo: currentDirectory)
-            let contents = try FileManager.default.contentsOfDirectory(at: targetDirectory, includingPropertiesForKeys: nil)
-            for url in contents {
-                let fileName = url.lastPathComponent
-                if !all {
-                    if fileName.hasPrefix(".") {
-                        continue
-                    }
-                }
-                files.append(fileName)
-            }
-        } catch {
-            print("Failed to list directory contents: \(error)")
+        files = []
+        let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        let target = URL(fileURLWithPath: path, relativeTo: currentDirectory)
+
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: target.path, isDirectory: &isDirectory) else {
+            print("No such file or directory: \(path)")
+            return files
         }
+
+        if isDirectory.boolValue {
+            do {
+                let contents = try FileManager.default.contentsOfDirectory(at: target, includingPropertiesForKeys: nil)
+                for url in contents {
+                    let fileName = url.lastPathComponent
+                    if !all && fileName.hasPrefix(".") { continue }
+                    files.append(fileName)
+                }
+            } catch {
+                print("Failed to list directory contents: \(error)")
+            }
+        } else {
+            files.append(target.lastPathComponent)
+        }
+
         return files
     }
 }
