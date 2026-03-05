@@ -134,148 +134,136 @@ struct SL {
             ]
         )
     }
-    
-    final class TrainView: View {
-            private var isAnimating = false
-            private var animationWorkItem: DispatchWorkItem?
+    private let trainLines: [String] = [
+            "      ====        ________                ___________ ",
+            "  _D _|  |_______/        \\__I_I_____===__|_________| ",
+            "   |(_)---  |   H\\________/ |   |        =|___ ___|   ",
+            "   /     |  |   H  |  |     |   |         ||_| |_||   ",
+            "  |      |  |   H  |__--------------------| [___] |   ",
+            "  | ________|___H__/__|_____/[][]~\\_______|       |   ",
+            "  |/ |   |-----------I_____I [][] []  D   |=======|__ ",
+            "__/ =| o |=-~~\\  /~~\\  /~~\\  /~~\\ ____Y___________|__ ",
+            " |/-=|___|=    ||    ||    ||    |_____/~\\___/        ",
+            "  \\_/      \\_O=====O=====O=====O/      \\_/            ",
+        ]
 
-            // 簡易 ASCII 列車
-            private let trainLines: [String] = [
-                "      ____      ",
-                " ___/|__|\\___   ",
-                "|_o_o_o_o_o_|   "
-            ]
+    private var trainWidth: Int {
+        trainLines.map { $0.count }.max() ?? 0
+    }
+    private var trainHeight: Int {
+        trainLines.count
+    }
 
-            private let trainWidth: Int
-            private let trainHeight: Int
+    // ANSI を書き出す簡単なヘルパ
+    private func write(_ s: String) {
+        FileHandle.standardOutput.write(s.data(using: .utf8)!)
+    }
 
-            // 列車の左端 X 座標
-            private var currentX: Int
+    /// カーソル移動（1-origin）
+    private func moveCursor(row: Int, col: Int) {
+        write("\u{1B}[\(row);\(col)H")
+    }
 
-            /// 端末の横幅（何列あるか）を渡す
-        init(terminalWidth: Int, terminalHeight: Int) {
-                self.trainHeight = trainLines.count
-                self.trainWidth  = trainLines.map { $0.count }.max() ?? 0
-                // 画面のすぐ右側から出てくるようにする
-                self.currentX    = terminalWidth
-                super.init()
-                fill()
-                canFocus = false
-            }
+    /// カーソル非表示
+    private func hideCursor() {
+        write("\u{1B}[?25l")
+    }
 
-            deinit {
-                stopAnimation()
-            }
+    /// カーソル表示
+    private func showCursor() {
+        write("\u{1B}[?25h")
+    }
 
-            // 画面中央付近に列車を描画
-            override func drawContent(in region: Rect, painter: Painter) {
-                let viewWidth  = bounds.width
-                let viewHeight = bounds.height
+    /// 画面全体クリア＋ホーム
+    private func clearScreen() {
+        write("\u{1B}[2J")   // 全消去
+        write("\u{1B}[H")    // カーソルを左上へ
+    }
 
-                let baseY = max(0, (viewHeight - trainHeight) / 2)
+    /// 指定行を空白でクリア
+    private func clearLine(row: Int, width: Int) {
+        moveCursor(row: row, col: 1)
+        write(String(repeating: " ", count: max(width, 0)))
+    }
 
-                for (row, line) in trainLines.enumerated() {
-                    let lineLen = line.count
-                    if lineLen == 0 { continue }
+    /// row: 行数, col: 列数
+    func run(row rows: Int, col cols: Int) {
+        // 0 行/0 列など異常値なら何もしない
+        guard rows > 0, cols > 0 else { return }
 
-                    let drawY = baseY + row
-                    if drawY < 0 || drawY >= viewHeight { continue }
+        // 端末を alternate screen に切り替え（元の画面は退避）
+        // Vim や less が使うやつです
+        write("\u{1B}[?1049h")
 
-                    // 列車の表示範囲 [left, right)
-                    let left  = currentX
-                    let right = currentX + lineLen
+        hideCursor()
+        clearScreen()
 
-                    // 完全に画面外ならスキップ
-                    if right <= 0 || left >= viewWidth { continue }
+        // 縦方向のセンタリング（0-origin で考える）
+        // 画面: 0...(rows-1), 列車: 0...(trainHeight-1)
+        let baseRow0 = max(0, (rows - trainHeight) / 2)
 
-                    // 画面上の表示区間 [visibleStartScreen, visibleEndScreen)
-                    let visibleStartScreen = max(left, 0)
-                    let visibleEndScreen   = min(right, viewWidth)
-                    let visibleLen         = visibleEndScreen - visibleStartScreen
-                    if visibleLen <= 0 { continue }
-
-                    // 文字列中の開始位置（列車左端からのオフセット）
-                    let srcStart = visibleStartScreen - left
-
-                    let startIdx = line.index(line.startIndex, offsetBy: srcStart)
-                    let endIdx   = line.index(startIdx, offsetBy: visibleLen)
-                    let visible  = String(line[startIdx..<endIdx])
-
-                    painter.goto(col: visibleStartScreen, row: drawY)
-                    painter.add(str: visible)
+        // 1 フレーム前に列車が占有していた行を全部消す関数
+        func clearTrainArea() {
+            for i in 0..<trainHeight {
+                let row0 = baseRow0 + i
+                if row0 >= 0 && row0 < rows {
+                    clearLine(row: row0 + 1, width: cols)
                 }
-            }
-
-            override func positionCursor() {
-                if let parent = superview {
-                    parent.moveTo(col: 0, row: 0)
-                } else {
-                    moveTo(col: 0, row: 0)
-                }
-            }
-
-            func startAnimation() {
-                guard !isAnimating else { return }
-                isAnimating = true
-                scheduleNextFrame()
-            }
-
-            private func stopAnimation() {
-                isAnimating = false
-                animationWorkItem?.cancel()
-                animationWorkItem = nil
-            }
-
-            private func scheduleNextFrame() {
-                let workItem = DispatchWorkItem { [weak self] in
-                    guard let self = self, self.isAnimating else { return }
-                    self.stepFrame()
-                    if self.isAnimating {
-                        self.scheduleNextFrame()
-                    }
-                }
-                animationWorkItem = workItem
-                // 約 40ms 間隔
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1, execute: workItem)
-            }
-
-            private func stepFrame() {
-                currentX -= 1
-
-                // 完全に画面左側へ抜けたら終了
-                if currentX + trainWidth < 0 {
-                    stopAnimation()
-                    Application.requestStop()
-                    return
-                }
-
-                setNeedsDisplay()
             }
         }
 
-    
-    /// 貨物車両
-    static let cargo = Cargo.default
-    
-    func run(row: Int, col: Int) {
-        Application.prepare()
-        let win = Window()
-        win.x = Pos.at(0)
-        win.y = Pos.at(0)
-        win.width = Dim.fill()
-        win.height = Dim.fill()
+        // 横方向は 0-origin で扱う（画面は 0...(cols-1)）
+        var x = cols   // 左端が画面右端の1つ外側からスタート
 
-        // 列車を描画・アニメーションする View
-        let trainView = TrainView(terminalWidth: col, terminalHeight: row)
-        trainView.fill()
+        // アニメーション終了後にカーソル・画面を元に戻す
+        defer {
+            showCursor()
+            // alternate screen を終了し、元の画面に戻す
+            write("\u{1B}[?1049l")
+        }
 
-        win.addSubview(trainView)
-        Application.top.addSubview(win)
+        // 列車の左端 x が trainWidth 分左に抜けるまで描画し続ける
+        while x + trainWidth > 0 {
+            // 古い位置を消す
+            clearTrainArea()
 
-        // アニメーション開始
-        trainView.startAnimation()
+            // 新しい位置を描画
+            for (lineIndex, line) in trainLines.enumerated() {
+                let lineLen = line.count
+                if lineLen == 0 { continue }
 
-        // メインループ
-        Application.run()
+                let row0 = baseRow0 + lineIndex
+                if row0 < 0 || row0 >= rows { continue }
+
+                // 列車の占有範囲 [trainLeft, trainRight]（0-origin）
+                let trainLeft  = x
+                let trainRight = x + lineLen - 1
+
+                // 画面の範囲 [0, cols-1] と交差していなければ描かない
+                if trainRight < 0 || trainLeft >= cols {
+                    continue
+                }
+
+                // 画面上での表示範囲 [screenLeft, screenRight]（0-origin）
+                let screenLeft  = max(0, trainLeft)
+                let screenRight = min(cols - 1, trainRight)
+                let visibleLen  = screenRight - screenLeft + 1
+                if visibleLen <= 0 { continue }
+
+                // 文字列中の開始位置（列車左端からのオフセット）
+                let srcStart = screenLeft - trainLeft
+                let startIdx = line.index(line.startIndex, offsetBy: srcStart)
+                let endIdx   = line.index(startIdx, offsetBy: visibleLen)
+                let visible  = String(line[startIdx..<endIdx])
+
+                // ANSI は 1-origin なので +1
+                moveCursor(row: row0 + 1, col: screenLeft + 1)
+                write(visible)
+            }
+
+            // 少し待ってから左に 1 マス進める
+            Thread.sleep(forTimeInterval: 0.06)
+            x -= 1
+        }
     }
 }
