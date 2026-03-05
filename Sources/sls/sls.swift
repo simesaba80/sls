@@ -12,10 +12,10 @@ struct sls: ParsableCommand {
     @Option(name: .shortAndLong, help: "虚無オプション")
     var name: Int?
     @Argument(help: "パスを入力")
-    var path: String = "."
+    var paths: [String] = ["."]
     mutating func run() throws {
         var fileGeter = FileGeter()
-        let files = fileGeter.getFile(path: path, all: all)
+        let files = paths.flatMap { fileGeter.getFile(path: $0, all: all) }
         let normalizingFile = NormalizingFiles()
         let normalizedFiles = normalizingFile.normalizingFiles(files: files)
         let setEmpty = SetEmpty()

@@ -9,6 +9,7 @@ import Foundation
 struct FileGeter {
     var files: [String] = []
     mutating func getFile(path: String, all: Bool = false) -> [String] {
+        files = []
         let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
         let target = URL(fileURLWithPath: path, relativeTo: currentDirectory)
 
