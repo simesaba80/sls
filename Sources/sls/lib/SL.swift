@@ -187,7 +187,7 @@ struct SL {
     }
 
     /// row: 行数, col: 列数
-    func run(row rows: Int, col cols: Int) {
+    func run(row rows: Int, col cols: Int, normalizedFiles: [String]) {
         // 0 行/0 列など異常値なら何もしない
         guard rows > 0, cols > 0 else { return }
 
@@ -198,13 +198,31 @@ struct SL {
         hideCursor()
         clearScreen()
 
+        // 煙 + SL上部 + ホイール + 石炭車両で全体を構成
+        let smokeHeight = SL.smoke[0].count
+        let slTopHeight = SL.slTop.count
+        let wheelHeight = SL.wheel[0].count
+        let coalHeight = SL.coalWagon.count
+        
+        // 列車全体の高さ（coalWagonはSL車体と同じ行に並ぶため、高さはsmokeHeight + 車体高さ）
+        let slBodyHeight = slTopHeight + wheelHeight
+        let totalHeight = smokeHeight + max(slBodyHeight, coalHeight)
+        
+        // ファイルwagonを生成（アニメーション前に1回だけ計算）
+        let cargoLines = buildCargoWagon(files: normalizedFiles)
+
+        // 列車全体の幅（各パーツの最大幅）
+        let slWidth = SL.slTop.map { $0.count }.max() ?? 0
+        let coalWidth = SL.coalWagon.map { $0.count }.max() ?? 0
+        let cargoWidth = cargoLines.map { $0.count }.max() ?? 0
+        let totalWidth = slWidth + coalWidth + cargoWidth
+
         // 縦方向のセンタリング（0-origin で考える）
-        // 画面: 0...(rows-1), 列車: 0...(trainHeight-1)
-        let baseRow0 = max(0, (rows - trainHeight) / 2)
+        let baseRow0 = max(0, (rows - totalHeight) / 2)
 
         // 1 フレーム前に列車が占有していた行を全部消す関数
         func clearTrainArea() {
-            for i in 0..<trainHeight {
+            for i in 0..<totalHeight {
                 let row0 = baseRow0 + i
                 if row0 >= 0 && row0 < rows {
                     clearLine(row: row0 + 1, width: cols)
@@ -214,6 +232,8 @@ struct SL {
 
         // 横方向は 0-origin で扱う（画面は 0...(cols-1)）
         var x = cols   // 左端が画面右端の1つ外側からスタート
+        var wheelFrame = 0  // ホイールアニメーションフレーム（0〜5）
+        var smokeFrame = 0  // 煙アニメーションフレーム（0〜1）
 
         // アニメーション終了後にカーソル・画面を元に戻す
         defer {
@@ -222,48 +242,148 @@ struct SL {
             write("\u{1B}[?1049l")
         }
 
-        // 列車の左端 x が trainWidth 分左に抜けるまで描画し続ける
-        while x + trainWidth > 0 {
+        // 列車の左端 x が totalWidth 分左に抜けるまで描画し続ける
+        while x + totalWidth > 0 {
             // 古い位置を消す
             clearTrainArea()
 
-            // 新しい位置を描画
-            for (lineIndex, line) in trainLines.enumerated() {
-                let lineLen = line.count
-                if lineLen == 0 { continue }
-
-                let row0 = baseRow0 + lineIndex
-                if row0 < 0 || row0 >= rows { continue }
-
-                // 列車の占有範囲 [trainLeft, trainRight]（0-origin）
-                let trainLeft  = x
-                let trainRight = x + lineLen - 1
-
-                // 画面の範囲 [0, cols-1] と交差していなければ描かない
-                if trainRight < 0 || trainLeft >= cols {
-                    continue
+            var currentRow = 0
+            
+            // 1. 煙を描画
+            let currentSmoke = SL.smoke[smokeFrame]
+            for line in currentSmoke {
+                let row0 = baseRow0 + currentRow
+                if row0 >= 0 && row0 < rows {
+                    drawLine(line: line, at: x, row: row0, cols: cols)
                 }
-
-                // 画面上での表示範囲 [screenLeft, screenRight]（0-origin）
-                let screenLeft  = max(0, trainLeft)
-                let screenRight = min(cols - 1, trainRight)
-                let visibleLen  = screenRight - screenLeft + 1
-                if visibleLen <= 0 { continue }
-
-                // 文字列中の開始位置（列車左端からのオフセット）
-                let srcStart = screenLeft - trainLeft
-                let startIdx = line.index(line.startIndex, offsetBy: srcStart)
-                let endIdx   = line.index(startIdx, offsetBy: visibleLen)
-                let visible  = String(line[startIdx..<endIdx])
-
-                // ANSI は 1-origin なので +1
-                moveCursor(row: row0 + 1, col: screenLeft + 1)
-                write(visible)
+                currentRow += 1
+            }
+            
+            // 2. SL上部を描画
+            for line in SL.slTop {
+                let row0 = baseRow0 + currentRow
+                if row0 >= 0 && row0 < rows {
+                    drawLine(line: line, at: x, row: row0, cols: cols)
+                }
+                currentRow += 1
+            }
+            
+            // 3. ホイールを描画（アニメーション）
+            let currentWheel = SL.wheel[wheelFrame]
+            for line in currentWheel {
+                let row0 = baseRow0 + currentRow
+                if row0 >= 0 && row0 < rows {
+                    drawLine(line: line, at: x, row: row0, cols: cols)
+                }
+                currentRow += 1
+            }
+            
+            // 4. 石炭車両を描画（SL車体と同じ行から開始）
+            for (i, line) in SL.coalWagon.enumerated() {
+                let row0 = baseRow0 + smokeHeight + i
+                if row0 >= 0 && row0 < rows {
+                    drawLine(line: line, at: x + slWidth, row: row0, cols: cols)
+                }
             }
 
-            // 少し待ってから左に 1 マス進める
+            // 5. ファイルwagonを描画（石炭車両の右側）
+            for (i, line) in cargoLines.enumerated() {
+                let row0 = baseRow0 + smokeHeight + i
+                if row0 >= 0 && row0 < rows {
+                    drawLine(line: line, at: x + slWidth + coalWidth, row: row0, cols: cols)
+                }
+            }
+
+            // 少し待ってから次のフレームへ
             Thread.sleep(forTimeInterval: 0.06)
+            
+            // 位置を左に移動
             x -= 1
+            
+            // ホイールアニメーションを更新（6フレーム）
+            wheelFrame = (wheelFrame + 1) % SL.wheel.count
+            
+            // 煙アニメーションを更新（2フレーム、ホイールより遅く）
+            if wheelFrame % 3 == 0 {
+                smokeFrame = (smokeFrame + 1) % SL.smoke.count
+            }
         }
+    }
+    
+    /// normalizedFiles（全て同一幅）からファイルwagon行を生成する
+    /// wagon構造（10行）: 空行 / 上枠 / ファイル5行 / 下枠 / 車輪2行
+    private func buildCargoWagon(files: [String]) -> [String] {
+        let maxRows = SL.Cargo.default.maxContentHeight  // 5
+        let minInnerWidth = SL.Cargo.default.minContentWidth  // 26
+        let fileWidth = files.first?.count ?? 0
+
+        // ファイルを5行ずつの列に分割
+        var columns: [[String]] = stride(from: 0, to: max(files.count, 1), by: maxRows).map { start in
+            var col = Array(files[start..<min(start + maxRows, files.count)])
+            while col.count < maxRows { col.append(String(repeating: " ", count: fileWidth)) }
+            return col
+        }
+        if columns.isEmpty {
+            columns = [Array(repeating: String(repeating: " ", count: 1), count: maxRows)]
+        }
+
+        // 各行を横に連結（列間にスペース1つ）
+        let contentRows = (0..<maxRows).map { rowIdx in
+            columns.map { $0[rowIdx] }.joined(separator: " ")
+        }
+
+        // 内部幅を確定（最低でもminInnerWidth）
+        let contentWidth = contentRows.map { $0.count }.max() ?? 0
+        let innerWidth = max(contentWidth, minInnerWidth)
+
+        // コンテンツ行を innerWidth に揃えてから壁を付ける
+        let contentLines = contentRows.map { row -> String in
+            let padded = row + String(repeating: " ", count: max(0, innerWidth - row.count))
+            return "|\(padded)|"
+        }
+
+        let topWidth = innerWidth + 2
+        let emptyLine = String(repeating: " ", count: topWidth)
+        let topBorder = String(repeating: "_", count: topWidth)
+        let botBorder = "|" + String(repeating: "_", count: innerWidth) + "|"
+
+        // 車輪パターン（幅に合わせて調整）
+        // 車輪2つの固定部分: "  |_D__D__D_|" (13) + pad + "|_D__D__D_|  " (13) = 26 + pad = topWidth
+        let wheelPad = max(2, innerWidth - 24)
+        let wheelTop = "  |_D__D__D_|" + String(repeating: " ", count: wheelPad) + "|_D__D__D_|  "
+        let wheelBot = "   \\_/   \\_/" + String(repeating: " ", count: wheelPad + 2) + "\\_/   \\_/   "
+
+        return [emptyLine, topBorder] + contentLines + [botBorder, wheelTop, wheelBot]
+    }
+
+    /// 指定位置に1行分の文字列を描画
+    private func drawLine(line: String, at x: Int, row: Int, cols: Int) {
+        let lineLen = line.count
+        if lineLen == 0 { return }
+        
+        // 列車の占有範囲 [trainLeft, trainRight]（0-origin）
+        let trainLeft  = x
+        let trainRight = x + lineLen - 1
+        
+        // 画面の範囲 [0, cols-1] と交差していなければ描かない
+        if trainRight < 0 || trainLeft >= cols {
+            return
+        }
+        
+        // 画面上での表示範囲 [screenLeft, screenRight]（0-origin）
+        let screenLeft  = max(0, trainLeft)
+        let screenRight = min(cols - 1, trainRight)
+        let visibleLen  = screenRight - screenLeft + 1
+        if visibleLen <= 0 { return }
+        
+        // 文字列中の開始位置（列車左端からのオフセット）
+        let srcStart = screenLeft - trainLeft
+        let startIdx = line.index(line.startIndex, offsetBy: srcStart)
+        let endIdx   = line.index(startIdx, offsetBy: visibleLen)
+        let visible  = String(line[startIdx..<endIdx])
+        
+        // ANSI は 1-origin なので +1
+        moveCursor(row: row + 1, col: screenLeft + 1)
+        write(visible)
     }
 }

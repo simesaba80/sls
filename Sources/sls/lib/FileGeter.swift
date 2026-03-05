@@ -7,14 +7,15 @@
 import Foundation
 
 struct FileGeter {
-//    let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-    let currentDirectory = FileManager.default.currentDirectoryPath
     var files: [String] = []
     mutating func getFile(path: String, all: Bool = false) -> [String] {
         do {
-            let contents = try FileManager.default.contentsOfDirectory(atPath: currentDirectory)
+            let currentDirectory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        //    let currentDirectory = FileManager.default.currentDirectoryPath
+            let targetDirectory: URL = URL(fileURLWithPath: path, relativeTo: currentDirectory)
+            let contents = try FileManager.default.contentsOfDirectory(at: targetDirectory, includingPropertiesForKeys: nil)
             for url in contents {
-                let fileName = URL(fileURLWithPath: url).lastPathComponent
+                let fileName = url.lastPathComponent
                 if !all {
                     if fileName.hasPrefix(".") {
                         continue

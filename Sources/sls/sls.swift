@@ -12,22 +12,19 @@ struct sls: ParsableCommand {
     @Option(name: .shortAndLong, help: "虚無オプション")
     var name: Int?
     @Argument(help: "パスを入力")
-    var path: String
+    var path: String = "."
     mutating func run() throws {
-        print("Hello \(path)")
         var fileGeter = FileGeter()
         let files = fileGeter.getFile(path: path, all: all)
-        for file in files {
-            print(file, terminator: " ")
-        }
-        print()
-        var setEmpty = SetEmpty()
+        let normalizingFile = NormalizingFiles()
+        let normalizedFiles = normalizingFile.normalizingFiles(files: files)
+        let setEmpty = SetEmpty()
 //        let emptyFullScreens = setEmpty.makeEmptyString()
 //        for emptyFullScreen in emptyFullScreens {
 //            print(emptyFullScreen)
 //        }
-        var SL = SL()
+        let sl = SL()
         let windowSize = setEmpty.getWindowSize()
-        SL.run(row: windowSize.row, col: windowSize.col)
+        sl.run(row: windowSize.row, col: windowSize.col, normalizedFiles: normalizedFiles)
     }
 }
