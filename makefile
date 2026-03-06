@@ -1,6 +1,11 @@
 COMMAND_NAME = sls
 
+.PHONY: releaselinux
+releaselinux:
+	docker compose up -d
+	sudo cp .build/release/sls /usr/local/bin/sls
+
 .PHONY: release
 release:
-	docker compose up
+	swift build -c release
 	sudo cp .build/release/sls /usr/local/bin/sls
